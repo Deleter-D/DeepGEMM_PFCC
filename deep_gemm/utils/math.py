@@ -1,5 +1,3 @@
-import paddle
-paddle.compat.enable_torch_proxy()
 import torch
 from typing import Tuple
 

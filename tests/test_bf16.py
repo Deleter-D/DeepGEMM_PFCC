@@ -39,7 +39,6 @@ def test_gemm() -> None:
                 assert a.is_contiguous() and b.is_contiguous()
             getattr(deep_gemm, func_name)(a, b, d, c=c)
             diff = calc_diff(d, ref_d)
-            print("diff: ", diff, flush=1)
             assert diff < 1e-5, (f'{m=}, {n=}, {k=}, {major_opt=}, {accumulate=}, {out_dtype=}, '
                                    f'{diff:.5f}, alias={test_alias}')
     #     a, b, c, d, ref_d = generate_normal(m, n, k, major_a, major_b, accumulate, out_dtype, kernel_type, use_bf16=True)
@@ -73,7 +72,6 @@ def test_m_grouped_gemm_contiguous() -> None:
             getattr(deep_gemm, func_name)(a, b, d, m_indices)
             d = torch.where((m_indices == -1).unsqueeze(1), torch.zeros_like(d), d)
             diff = calc_diff(d, ref_d)
-            print("diff: ", diff, flush=1)
             assert diff < 1e-5, f'{m=}, {n=}, {k=}, {major_opt}, {diff:.5f}, alias={test_alias}'
         # m, a, b, m_indices, d, ref_d = generate_m_grouped_contiguous(num_groups, expected_m_per_group, n, k, major_a, major_b, use_bf16=True)
 
@@ -100,7 +98,6 @@ def test_m_grouped_gemm_masked() -> None:
             deep_gemm.m_grouped_bf16_gemm_nt_masked(a, b, d, masked_m, expected_m_per_group)
             for j in range(num_groups):
                 diff = calc_diff(d[j, :masked_m[j].item()], ref_d[j, :masked_m[j].item()])
-                print("diff: ", diff, flush=1)
                 assert diff < 1e-5, f'{max_m=}, {n=}, {k=}, {j=}, masked_m={masked_m[j]}, {num_groups=}, {diff:.5f}'
 
         # # Construct full cases
@@ -133,7 +130,6 @@ def test_k_grouped_gemm_contiguous() -> None:
             deep_gemm.k_grouped_bf16_gemm_tn_contiguous(a, b, d, new_ks, new_ks_tensor, c)
 
             diff = calc_diff(d, ref_d)
-            print("diff: ", diff, flush=1)
             assert diff < 1e-5, f'{m=}, {n=}, {k=}, {ks=}, {diff:.7f}'
 
         # # Test performance
@@ -163,7 +159,6 @@ def test_cublaslt_gemm() -> None:
         a, b, c, d, ref_d = generate_normal(m, n, k, major_a, major_b, accumulate, out_dtype, kernel_type, use_bf16=True)
         deep_gemm.cublaslt_gemm_nt(a, b, d, c=c)
         diff = calc_diff(d, ref_d)
-        print("diff: ", diff, flush=1)
         assert diff < 6e-7, f'{diff=}, ({m=}, {n=}, {k=}, {major_opt=}, {accumulate=}, {out_dtype=})'
 
         # t = bench_kineto(lambda: deep_gemm.cublaslt_gemm_nt(a, b, d, c=c), 'nvjet', suppress_kineto_output=True,)

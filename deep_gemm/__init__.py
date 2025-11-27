@@ -1,6 +1,3 @@
-import paddle
-paddle.compat.enable_torch_proxy()
-
 import os
 import subprocess
 import torch
