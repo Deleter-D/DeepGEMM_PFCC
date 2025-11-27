@@ -1,8 +1,10 @@
 #pragma once
 
+#define PADDLE_WITH_CUDA // make sure gpuStream_t declaration
+
 #include <cublasLt.h>
-#include <torch/version.h>
 #include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAStream.h>
 
 #include "../utils/exception.hpp"
 #include "../utils/lazy_init.hpp"
@@ -17,7 +19,7 @@ class DeviceRuntime {
     static constexpr size_t kCublasLtWorkspaceSize = 32 * 1024 * 1024;
 
 public:
-#if TORCH_VERSION_MAJOR > 2 or (TORCH_VERSION_MAJOR == 2 and TORCH_VERSION_MINOR >= 3)
+#if false
     // For PyTorch 2.3+, share the PyTorch cuBLASLt handle
     DeviceRuntime() = default;
 

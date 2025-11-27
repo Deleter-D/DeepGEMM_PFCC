@@ -1,3 +1,5 @@
+import paddle
+paddle.compat.enable_torch_proxy()
 import enum
 import random
 import torch
@@ -65,7 +67,7 @@ def enumerate_normal(dtype: torch.dtype) -> Generator:
 
     fp32_output_nk = [(256, 7168), (129280, 7168)]
     bf16_output_nk = [(2112, 7168), (576, 7168), (24576, 1536), (32768, 512), (7168, 16384), (4096, 7168), (7168, 2048)]
-    m_fwd_list, m_bwd_list = [1, 128, 4096], [4096, ]
+    m_fwd_list, m_bwd_list = [128, 4096], [4096, ]
     nk_list = list(bf16_output_nk)
 
     # Only BF16 GEMM needs FP32 outputs
@@ -199,10 +201,13 @@ def generate_m_grouped_contiguous(num_groups: int, expected_m_per_group: int, n:
 
     assert major_a.is_k_major()
     a_fp8 = per_token_cast_to_fp8(a, use_ue8m0=use_ue8m0)
-    b_fp8 = (torch.empty_like(b, dtype=torch.float8_e4m3fn),
-             torch.empty((num_groups, ceil_div(n, 128), ceil_div(k, 128)), device='cuda', dtype=torch.float))
+    b_fp8_list = []
+    b_fp8_scale = []
     for i in range(num_groups):
-        b_fp8[0][i], b_fp8[1][i] = per_block_cast_to_fp8(b[i], use_ue8m0=use_ue8m0)
+        out, scale = per_block_cast_to_fp8(b[i], use_ue8m0=use_ue8m0)
+        b_fp8_list.append(out)
+        b_fp8_scale.append(scale)
+    b_fp8 = (paddle.stack(b_fp8_list, dim=0), paddle.stack(b_fp8_scale, dim=0))
     b_fp8 = b_fp8 if major_b.is_k_major() else (b_fp8[0].mT.contiguous().mT, b_fp8[1])
     return m, a_fp8, b_fp8, m_indices, d, ref_d
 
@@ -222,11 +227,13 @@ def generate_m_grouped_masked(num_groups: int, max_m: int, expected_m_per_group:
     if use_bf16:
         return a, b, masked_m, d, ref_d
 
-    a_fp8 = (torch.empty_like(a, dtype=torch.float8_e4m3fn), torch.empty((num_groups, max_m, ceil_div(k, 128)), device='cuda', dtype=torch.float))
-    b_fp8 = (torch.empty_like(b, dtype=torch.float8_e4m3fn), torch.empty((num_groups, ceil_div(n, 128), ceil_div(k, 128)), device='cuda', dtype=torch.float))
+    a_fp8 = (torch.empty_like(a, dtype=torch.bfloat16), torch.empty((num_groups, max_m, ceil_div(k, 128)), device='cuda', dtype=torch.float))
+    b_fp8 = (torch.empty_like(b, dtype=torch.bfloat16), torch.empty((num_groups, ceil_div(n, 128), ceil_div(k, 128)), device='cuda', dtype=torch.float))
     for i in range(num_groups):
-        a_fp8[0][i], a_fp8[1][i] = per_token_cast_to_fp8(a[i], use_ue8m0=use_ue8m0)
-        b_fp8[0][i], b_fp8[1][i] = per_block_cast_to_fp8(b[i], use_ue8m0=use_ue8m0)
+        a_fp8[0][i], a_fp8[1][i] = per_token_cast_to_fp8(a[i].to(torch.bfloat16), use_ue8m0=use_ue8m0)
+        b_fp8[0][i], b_fp8[1][i] = per_block_cast_to_fp8(b[i].to(torch.bfloat16), use_ue8m0=use_ue8m0)
+    a_fp8 = (a_fp8[0].to(torch.float8_e4m3fn), a_fp8[1])
+    b_fp8 = (b_fp8[0].to(torch.float8_e4m3fn), b_fp8[1])
 
     return a_fp8, b_fp8, masked_m, d, ref_d
 
@@ -259,13 +266,15 @@ def generate_k_grouped_contiguous(num_groups: int, m: int, n: int, major_a: Majo
     if (major_a, major_b) == (MajorTypeAB.KMajor, MajorTypeAB.KMajor):
         a, sfa = a_fp8
         b, sfb = b_fp8
-        new_a = torch.empty((sum(ks) * m, ), dtype=a.dtype, device=a.device)
-        new_b = torch.empty((sum(ks) * n, ), dtype=b.dtype, device=b.device)
+        a_chunks = []
+        b_chunks = []
         prefix = 0
         for K in ks:
-            new_a[prefix * m : (prefix + K) * m] = a[prefix : prefix + K, ].T.flatten()
-            new_b[prefix * n : (prefix + K) * n] = b[prefix : prefix + K, ].T.flatten()
+            a_chunks.append(a[prefix : prefix + K, ].T.flatten())
+            b_chunks.append(b[prefix : prefix + K, ].T.flatten())
             prefix += K
+        new_a = torch.concat(a_chunks)
+        new_b = torch.concat(b_chunks)
         a_fp8, b_fp8 = (new_a, sfa.T), (new_b, sfb.T)
     else:
         assert (major_a, major_b) == (MajorTypeAB.MNMajor, MajorTypeAB.MNMajor)

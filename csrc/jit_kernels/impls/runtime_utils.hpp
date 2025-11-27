@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda.h>
+#include <c10/cuda/CUDAStream.h>
 #include <torch/python.h>
 
 #include "../heuristics/sm90.hpp"

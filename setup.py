@@ -1,3 +1,6 @@
+import paddle
+paddle.compat.enable_torch_proxy()
+
 import ast
 import os
 import re
@@ -14,10 +17,12 @@ from setuptools import find_packages
 from setuptools.command.build_py import build_py
 from packaging.version import parse
 from pathlib import Path
-from torch.utils.cpp_extension import CUDAExtension, CUDA_HOME
+# from torch.utils.cpp_extension import CUDAExtension, CUDA_HOME, BuildExtension
+from paddle.utils.cpp_extension import CUDAExtension, setup
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 from scripts.generate_pyi import generate_pyi_file
 
+CUDA_HOME = "/usr/local/cuda"
 
 DG_SKIP_CUDA_BUILD = int(os.getenv('DG_SKIP_CUDA_BUILD', '0')) == 1
 DG_FORCE_BUILD = int(os.getenv('DG_FORCE_BUILD', '0')) == 1
@@ -26,9 +31,11 @@ DG_JIT_USE_RUNTIME_API = int(os.environ.get('DG_JIT_USE_RUNTIME_API', '0')) == 1
 
 # Compiler flags
 cxx_flags = ['-std=c++17', '-O3', '-fPIC', '-Wno-psabi', '-Wno-deprecated-declarations',
-             f'-D_GLIBCXX_USE_CXX11_ABI={int(torch.compiled_with_cxx11_abi())}']
+             f'-D_GLIBCXX_USE_CXX11_ABI={int(torch._C._GLIBCXX_USE_CXX11_ABI)}']
 if DG_JIT_USE_RUNTIME_API:
     cxx_flags.append('-DDG_JIT_USE_RUNTIME_API')
+
+cxx_flags.extend(["-DPADDLE_WITH_CUDA", "-DPADDLE_WITH_NCCL"])
 
 # Sources
 current_dir = os.path.dirname(os.path.realpath(__file__))
@@ -40,7 +47,7 @@ build_include_dirs = [
     'third-party/cutlass/include',
     'third-party/fmt/include',
 ]
-build_libraries = ['cudart', 'nvrtc']
+build_libraries = ['cuda', 'cudart', 'cublas', 'nvrtc']
 build_library_dirs = [f'{CUDA_HOME}/lib64']
 third_party_include_dirs = [
     'third-party/cutlass/include/cute',
@@ -108,7 +115,7 @@ def get_ext_modules():
                           include_dirs=build_include_dirs,
                           libraries=build_libraries,
                           library_dirs=build_library_dirs,
-                          extra_compile_args=cxx_flags)]
+                          extra_compile_args={"nvcc": cxx_flags, "cxx": cxx_flags})]
 
 
 class CustomBuildPy(build_py):
@@ -193,8 +200,8 @@ class CachedWheelsCommand(_bdist_wheel):
 
 if __name__ == '__main__':
     # noinspection PyTypeChecker
-    setuptools.setup(
-        name='deep_gemm',
+    setup(
+        name='deep_gemm_cpp',
         version=get_package_version(),
         packages=find_packages('.'),
         package_data={
@@ -202,12 +209,9 @@ if __name__ == '__main__':
                 'include/deep_gemm/**/*',
                 'include/cute/**/*',
                 'include/cutlass/**/*',
+                'include/fmt/**/*',
             ]
         },
         ext_modules=get_ext_modules(),
-        zip_safe=False,
-        cmdclass={
-            'build_py': CustomBuildPy,
-            'bdist_wheel': CachedWheelsCommand,
-        },
+        verbose=True,
     )
