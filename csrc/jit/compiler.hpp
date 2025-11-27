@@ -1,6 +1,9 @@
 #pragma once
 
+#define PADDLE_WITH_CUDA // make sure gpuStream_t declaration
+
 #include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAStream.h>
 #include <cuda_runtime.h>
 #include <filesystem>
 #include <fstream>

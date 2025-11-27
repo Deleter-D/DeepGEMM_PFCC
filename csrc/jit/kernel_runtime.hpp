@@ -1,5 +1,7 @@
 #pragma once
 
+#define PADDLE_WITH_CUDA // make sure gpuStream_t declaration
+
 #include "../utils/exception.hpp"
 #include "../utils/format.hpp"
 #include "../utils/system.hpp"

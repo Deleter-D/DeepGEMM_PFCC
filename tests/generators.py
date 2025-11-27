@@ -1,3 +1,5 @@
+import paddle
+paddle.compat.enable_torch_proxy()
 import enum
 import random
 import torch
@@ -222,11 +224,13 @@ def generate_m_grouped_masked(num_groups: int, max_m: int, expected_m_per_group:
     if use_bf16:
         return a, b, masked_m, d, ref_d
 
-    a_fp8 = (torch.empty_like(a, dtype=torch.float8_e4m3fn), torch.empty((num_groups, max_m, ceil_div(k, 128)), device='cuda', dtype=torch.float))
-    b_fp8 = (torch.empty_like(b, dtype=torch.float8_e4m3fn), torch.empty((num_groups, ceil_div(n, 128), ceil_div(k, 128)), device='cuda', dtype=torch.float))
+    a_fp8 = (torch.empty_like(a, dtype=torch.bfloat16), torch.empty((num_groups, max_m, ceil_div(k, 128)), device='cuda', dtype=torch.float))
+    b_fp8 = (torch.empty_like(b, dtype=torch.bfloat16), torch.empty((num_groups, ceil_div(n, 128), ceil_div(k, 128)), device='cuda', dtype=torch.float))
     for i in range(num_groups):
-        a_fp8[0][i], a_fp8[1][i] = per_token_cast_to_fp8(a[i], use_ue8m0=use_ue8m0)
-        b_fp8[0][i], b_fp8[1][i] = per_block_cast_to_fp8(b[i], use_ue8m0=use_ue8m0)
+        a_fp8[0][i], a_fp8[1][i] = per_token_cast_to_fp8(a[i].to(torch.bfloat16), use_ue8m0=use_ue8m0)
+        b_fp8[0][i], b_fp8[1][i] = per_block_cast_to_fp8(b[i].to(torch.bfloat16), use_ue8m0=use_ue8m0)
+    a_fp8 = (a_fp8[0].to(torch.float8_e4m3fn), a_fp8[1])
+    b_fp8 = (b_fp8[0].to(torch.float8_e4m3fn), b_fp8[1])
 
     return a_fp8, b_fp8, masked_m, d, ref_d
 
@@ -259,8 +263,8 @@ def generate_k_grouped_contiguous(num_groups: int, m: int, n: int, major_a: Majo
     if (major_a, major_b) == (MajorTypeAB.KMajor, MajorTypeAB.KMajor):
         a, sfa = a_fp8
         b, sfb = b_fp8
-        new_a = torch.empty((sum(ks) * m, ), dtype=a.dtype, device=a.device)
-        new_b = torch.empty((sum(ks) * n, ), dtype=b.dtype, device=b.device)
+        new_a = torch.empty((sum(ks) * m, ), dtype=a.dtype, device=a.place)
+        new_b = torch.empty((sum(ks) * n, ), dtype=b.dtype, device=b.place)
         prefix = 0
         for K in ks:
             new_a[prefix * m : (prefix + K) * m] = a[prefix : prefix + K, ].T.flatten()

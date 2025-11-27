@@ -1,3 +1,6 @@
+import paddle
+paddle.compat.enable_torch_proxy()
+
 import os
 import subprocess
 import torch
@@ -15,8 +18,8 @@ except ImportError:
     pass
 
 # Configs
-from . import _C
-from ._C import (
+import deep_gemm_cpp
+from deep_gemm_cpp import (
     set_num_sms,
     get_num_sms,
     set_tc_util,
@@ -24,14 +27,14 @@ from ._C import (
 )
 
 # cuBLASLt Kernels
-from ._C import (
+from deep_gemm_cpp import (
     cublaslt_gemm_nt, cublaslt_gemm_nn,
     cublaslt_gemm_tn, cublaslt_gemm_tt,
 )
 
 if version.parse(cuda_version) >= version.parse('12.1'):
     # DeepGEMM Kernels
-    from ._C import (
+    from deep_gemm_cpp import (
         # FP8 GEMMs
         fp8_gemm_nt, fp8_gemm_nn,
         fp8_gemm_tn, fp8_gemm_tt,
@@ -91,8 +94,7 @@ def _find_cuda_home() -> str:
     assert cuda_home is not None
     return cuda_home
 
-
-_C.init(
+deep_gemm_cpp.init(
     os.path.dirname(os.path.abspath(__file__)), # Library root directory path
     _find_cuda_home()                           # CUDA home
 )
