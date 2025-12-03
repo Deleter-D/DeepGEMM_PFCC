@@ -1,4 +1,31 @@
-# DeepGEMM
+# DeepGEMM ❤️ PaddlePaddle
+
+> [!NOTE]
+>
+> This repo is a fork of the original DeepGEMM project, with modifications to enhance compatibility and integration with PaddlePaddle.
+>
+> **Installation**
+>
+> ```bash
+> pip install paddlepaddle_gpu  # Install PaddlePaddle with GPU support, refer to https://www.paddlepaddle.org.cn/install/quick for more details
+> git clone https://github.com/PFCCLab/DeepGEMM.git
+> cd DeepGEMM
+> git submodule update --init
+> bash install.sh
+> ```
+>
+> **Usage**
+>
+> ```python
+> import paddle
+> paddle.compat.enable_torch_proxy(scope={"deep_gemm"})  # Enable torch proxy before importing deep_gemm
+> import deep_gemm
+> # use deep_gemm
+> ```
+
+The original README.md content is as follows:
+
+---
 
 DeepGEMM is a library designed for clean and efficient General Matrix Multiplications (GEMMs). It supports FP8 and BF16 (working in progress) for both normal and Mix-of-Experts (MoE) grouped scenarios. Written in CUDA, the library has no kernel compilation need during installation, by compiling all kernels at runtime using a lightweight Just-In-Time (JIT) module.
 
